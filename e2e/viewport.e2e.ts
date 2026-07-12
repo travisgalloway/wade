@@ -1,9 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// Headless CI Chromium generally lacks WebGPU, so these assertions are deliberately about "a
-// frame was rendered" (window.__wade.renderCount, from src/lib/viewport/renderLoop.ts), never
-// about WebGPU specifically being the active backend — the automatic WebGL2 fallback makes the
-// former true on either backend. WebGPU-by-default is verified manually in a local Chromium.
+// Runs under the 'chromium' Playwright project, which launches *without* --enable-unsafe-webgpu:
+// navigator.gpu is absent, so the renderer takes its automatic WebGL2 fallback. That makes this
+// suite the one that keeps the fallback path exercised. Its assertions are therefore deliberately
+// backend-agnostic — "a frame was rendered" (window.__wade.renderCount, from
+// src/lib/viewport/renderLoop.ts) plus the on-demand invariant. Proving WebGPU is the *default*
+// backend is webgpu.e2e.ts's job, under the sibling 'webgpu' project.
 
 function renderCount(page: Page) {
 	return page.evaluate(
