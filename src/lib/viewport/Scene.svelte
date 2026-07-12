@@ -4,17 +4,21 @@
 	// and now (issues #16-#18) input routing and picking. The geometry/camera references below are
 	// load-once, not per-frame (invariant 3) — nothing here is written to on every tick.
 	import { T, useThrelte } from '@threlte/core';
-	import { OrbitControls, useOrbitControls } from '@threlte/extras';
+	import { OrbitControls, TransformControls, useOrbitControls } from '@threlte/extras';
 	import {
 		Box3,
 		TOUCH,
 		type BufferGeometry,
+		type InstancedMesh,
 		type Mesh,
 		type Object3D,
 		type PerspectiveCamera
 	} from 'three';
+	import type { TransformControls as TransformControlsImpl } from 'three/examples/jsm/controls/TransformControls.js';
 	import { MeshStandardNodeMaterial } from 'three/webgpu';
 	import { frameBox } from './framing';
+	import { GIZMO_SIZE } from './gizmo';
+	import { allGeometriesIndexed, BOLT_POSITIONS, createBoltInstances } from './instancing';
 	import { invalidateFor } from './renderLoop';
 	import { loadSampleMesh } from './sampleMesh';
 	import { buildBoundsTree, installBVHAcceleration, Picker, type PointerKind } from './picking';
@@ -33,11 +37,26 @@
 	let camera = $state.raw<PerspectiveCamera>();
 	let geometry = $state.raw<BufferGeometry>();
 	let mesh = $state.raw<Mesh>();
+	let boltMesh = $state.raw<InstancedMesh>();
+	let transformControls = $state.raw<TransformControlsImpl>();
+	let gizmoDragging = $state(false);
+
+	// A stable local binding for the template's {#if} to narrow against, and for the pointer
+	// handlers below to read without going through the SceneModel getter twice.
+	let selectedObject = $derived(sceneModel.selected);
 
 	const material = new MeshStandardNodeMaterial({
 		color: 0x9fb4c7,
 		roughness: 0.55,
 		metalness: 0.1
+	});
+
+	// Distinct finish from the bracket so the repeated hardware (issue #48) reads as separate
+	// parts, not more of the bracket itself.
+	const boltMaterial = new MeshStandardNodeMaterial({
+		color: 0x51565c,
+		roughness: 0.35,
+		metalness: 0.85
 	});
 
 	// Selection/hover feedback is a plain material tweak — no ShaderMaterial/onBeforeCompile, so it
@@ -93,6 +112,48 @@
 		};
 	});
 
+	// Bolts are procedural (issue #48), so unlike the sample mesh above they need no async load —
+	// built once on mount, and it's a legitimate "model changed" invalidation like the mesh load.
+	$effect(() => {
+		const instanced = createBoltInstances(BOLT_POSITIONS, boltMaterial);
+		boltMesh = instanced;
+		invalidateFor(invalidate, 'model');
+
+		return () => {
+			instanced.geometry.dispose();
+		};
+	});
+
+	// <TransformControls>'s own autoPauseControls (default true) already disables the registered
+	// OrbitControls for as long as `dragging` is true — that alone is what stops a gizmo drag from
+	// also orbiting the camera (invariant 8). This listener tracks the same flag locally so the
+	// pointer handlers below can treat an in-progress gizmo drag as the `manipulate` gesture it is,
+	// instead of reacting to whatever mode the router computed for the underlying mouse/touch drag
+	// (see onPointerMove/onPointerRelease).
+	$effect(() => {
+		const controls = transformControls;
+		if (!controls) return;
+
+		const onDraggingChanged = (event: { value: unknown }) => {
+			gizmoDragging = Boolean(event.value);
+		};
+		controls.addEventListener('dragging-changed', onDraggingChanged);
+		return () => controls.removeEventListener('dragging-changed', onDraggingChanged);
+	});
+
+	// Exposed for e2e (issues #19, #48), same pattern as renderCount/backend in renderLoop.ts.
+	$effect(() => {
+		if (typeof window === 'undefined' || !window.__wade) return;
+		window.__wade.gizmoVisible = selectedObject !== null;
+	});
+
+	$effect(() => {
+		if (!mesh || !boltMesh) return;
+		if (typeof window === 'undefined' || !window.__wade) return;
+		window.__wade.boltCount = BOLT_POSITIONS.length;
+		window.__wade.allIndexed = allGeometriesIndexed([mesh, boltMesh]);
+	});
+
 	function toPointerType(pointerType: string): PointerType {
 		if (pointerType === 'pen') return 'pen';
 		if (pointerType === 'touch') return 'touch';
@@ -140,6 +201,11 @@
 			pointer: { pointerId: event.pointerId, x, y }
 		});
 
+		// A gizmo drag is the `manipulate` gesture in progress (invariant 8) — never let it also
+		// drive hover picking against the underlying mesh, regardless of what mode the router
+		// computed for the mouse/touch drag that's operating the gizmo.
+		if (gizmoDragging) return;
+
 		// Hover is only meaningful while nothing has locked to navigate — an active orbit/pan must
 		// never also drive hover picking (invariant 8), and this is also what keeps a plain
 		// mouse-move-with-no-buttons-down (decision.mode stays null) able to hover at all.
@@ -152,6 +218,12 @@
 			if (pointerType === 'pen') event.stopPropagation();
 
 			const decision = router.handle({ type, pointerType, pointerId: event.pointerId });
+
+			// A gizmo drag ending is a manipulate gesture finishing, not a selection click — running
+			// the selection pick here (which only tests the bare mesh, not the gizmo) could wrongly
+			// deselect the object right after transforming it.
+			if (gizmoDragging) return;
+
 			if (type === 'up' && decision.mode === 'manipulate') {
 				sceneModel.setSelected(pick(event, pointerType));
 			}
@@ -196,4 +268,17 @@
 
 {#if geometry}
 	<T.Mesh bind:ref={mesh} {geometry} {material} />
+{/if}
+
+{#if boltMesh}
+	<T is={boltMesh} />
+{/if}
+
+{#if selectedObject}
+	<TransformControls
+		object={selectedObject}
+		size={GIZMO_SIZE}
+		bind:controls={transformControls}
+		onobjectChange={() => invalidateFor(invalidate, 'interaction')}
+	/>
 {/if}

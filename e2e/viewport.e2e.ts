@@ -171,3 +171,81 @@ test('hovering the model sets hover state without selecting it, and is idempoten
 	await page.waitForTimeout(200);
 	expect(await renderCount(page)).toBe(settledCount);
 });
+
+// Gizmo (issue #19) and instancing/batching (issue #48).
+
+type GizmoWindow = {
+	__wade?: { gizmoVisible?: boolean; drawCalls?: number; boltCount?: number; allIndexed?: boolean };
+};
+
+function readGizmoVisible(page: Page) {
+	return page.evaluate(() => (window as GizmoWindow).__wade?.gizmoVisible ?? false);
+}
+
+test('the transform gizmo appears on selection and disappears when deselected', async ({
+	page
+}) => {
+	await page.goto('/');
+	await waitForFirstFrame(page);
+	await waitForRenderCountToSettle(page);
+
+	expect(await readGizmoVisible(page)).toBe(false);
+
+	await scanForHit(page, (x, y) => page.mouse.click(x, y), readSelected);
+	await page.waitForFunction(() => (window as GizmoWindow).__wade?.gizmoVisible === true);
+
+	const box = await page.locator('canvas').boundingBox();
+	if (!box) throw new Error('canvas has no bounding box');
+	await page.mouse.click(box.x + box.width * 0.02, box.y + box.height * 0.02);
+	await page.waitForFunction(() => (window as GizmoWindow).__wade?.gizmoVisible === false);
+});
+
+/**
+ * Reads {boltCount, drawCalls} straight after a fresh render (an orbit nudge), so the numbers
+ * reflect an actual `renderer.info.render` snapshot rather than a stale value left over from
+ * whatever render happened to run last before settling.
+ */
+async function readInstancingStats(page: Page) {
+	await dragOrbit(page);
+	await page.waitForTimeout(150);
+	return page.evaluate(() => (window as GizmoWindow).__wade);
+}
+
+// The scene draws in exactly THREE calls per frame, whatever `boltCount` is. Verified by patching
+// the WebGL2 context and counting real GL draws:
+//
+//   1  drawElements          — the bracket mesh
+//   1  drawElementsInstanced — ALL bolts, in a single instanced draw (this is issue #48's claim)
+//   1  drawArrays            — a renderer-internal fullscreen pass in WebGPURenderer's output path.
+//                              Non-indexed, so by construction it is not our geometry: every
+//                              geometry we create is indexed, and `allIndexed` below asserts it.
+//
+// Asserting the exact number rather than a loose "fewer draws than instances" bound is deliberate:
+// a loose bound would still pass if the bolts silently regressed from one instanced draw to two,
+// which is precisely the regression this test exists to catch.
+const EXPECTED_DRAW_CALLS = 3;
+
+test('the bolt pattern (issue #48) renders every instance in one instanced draw call, and every viewport geometry is indexed', async ({
+	page
+}) => {
+	await page.goto('/');
+	await waitForFirstFrame(page);
+	await waitForRenderCountToSettle(page);
+
+	const first = await readInstancingStats(page);
+	const boltCount = first?.boltCount ?? 0;
+
+	// More than one instance, otherwise "N instances collapse to one draw" holds trivially.
+	expect(boltCount).toBeGreaterThan(1);
+
+	// The load-bearing assertion: draw calls do not scale with instance count. Were instancing
+	// broken (one Mesh per bolt), this would be 2 + boltCount rather than 3.
+	expect(first?.drawCalls).toBe(EXPECTED_DRAW_CALLS);
+	expect(EXPECTED_DRAW_CALLS).toBeLessThan(boltCount);
+
+	// Stable across repeated frames, not a one-off from a particular render.
+	const second = await readInstancingStats(page);
+	expect(second?.drawCalls).toBe(EXPECTED_DRAW_CALLS);
+
+	expect(first?.allIndexed).toBe(true);
+});
