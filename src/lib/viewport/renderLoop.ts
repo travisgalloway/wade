@@ -27,6 +27,14 @@ declare global {
 			gizmoVisible?: boolean;
 			/** Number of bolt instances drawn in the single instanced draw call (issue #48). */
 			boltCount?: number;
+			/** True once the kernel worker has finished booting occt-wasm and `warmup()` has
+			 *  resolved without a fatal error (issue #25). */
+			kernelReady?: boolean;
+			/** Cumulative count of kernel-produced meshes mounted into the scene so far, across
+			 *  every solid — incremented once per completed box/cylinder update (issue #25). */
+			kernelMeshCount?: number;
+			/** The most recent kernel error message, if any (issue #25). */
+			kernelError?: string;
 		};
 	}
 }
