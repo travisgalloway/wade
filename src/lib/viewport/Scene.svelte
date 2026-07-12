@@ -20,6 +20,7 @@
 	import { OrbitControls, TransformControls, useOrbitControls } from '@threlte/extras';
 	import {
 		Box3,
+		SphereGeometry,
 		TOUCH,
 		type BufferGeometry,
 		type Mesh,
@@ -28,7 +29,7 @@
 		type PerspectiveCamera
 	} from 'three';
 	import type { TransformControls as TransformControlsImpl } from 'three/examples/jsm/controls/TransformControls.js';
-	import { MeshStandardNodeMaterial } from 'three/webgpu';
+	import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 	import { createKernelClient } from '$lib/kernel/createKernelClient';
 	import type { KernelClient } from '$lib/kernel/KernelClient';
 	import { toBufferGeometry } from '$lib/kernel/geometry';
@@ -41,7 +42,15 @@
 	import { loadSampleMesh } from './sampleMesh';
 	import { buildBoundsTree, installBVHAcceleration, Picker, type PointerKind } from './picking';
 	import { PointerRouter, type PointerType } from '$lib/input/pointerRouter';
+	import type { GestureDecision } from '$lib/input/gestureArbiter';
 	import { createSceneModel } from '$lib/scene/SceneModel.svelte';
+	import { createSnapModel } from '$lib/scene/SnapModel.svelte';
+	import {
+		DEFAULT_GRID_SPACING,
+		DEFAULT_SNAP_TOLERANCE_PX,
+		resolveSnapAtPointer,
+		type SnapKind
+	} from '$lib/input/snapping';
 
 	let { paramsModel }: { paramsModel: ParamsModel } = $props();
 
@@ -51,6 +60,7 @@
 	const { invalidate, dom, size } = useThrelte();
 	const orbitControls = useOrbitControls();
 	const sceneModel = createSceneModel(invalidate);
+	const snapModel = createSnapModel(invalidate);
 	const router = new PointerRouter();
 	const picker = new Picker();
 
@@ -87,6 +97,32 @@
 				? [mesh]
 				: []
 	);
+
+	// Snapping (issue #27) is wired only into the kernel scene, not the `?kernel=off` fallback:
+	// adding a ground grid + marker there would add draw calls to the exact-drawCalls assertion in
+	// viewport.e2e.ts (EXPECTED_DRAW_CALLS === 3), which that suite always exercises. The snapping
+	// library itself (src/lib/input/snapping.ts) has no kernel dependency either way — this is
+	// purely about which demo scene shows it, not a limitation of the feature. See e2e/snapping.e2e.ts,
+	// which drives the kernel scene instead.
+	let snapMeshes = $derived<Mesh[]>(
+		useKernel ? ([boxMesh, cylinderMesh].filter((o): o is Mesh => o !== undefined) as Mesh[]) : []
+	);
+
+	const SNAP_MARKER_COLORS: Record<SnapKind, number> = {
+		vertex: 0xffcc33, // amber — the highest-priority, most precise snap kind
+		edge: 0x33c3ff, // cyan
+		grid: 0x7ccf7c // green
+	};
+	const snapMarkerGeometry = new SphereGeometry(1.5, 16, 16);
+	const snapMarkerMaterial = new MeshBasicNodeMaterial({ color: SNAP_MARKER_COLORS.vertex });
+
+	// Recolors the marker per the current snap kind, so a user can tell *why* it snapped — the
+	// difference between a vertex/edge/grid lock, not just that one happened (invariant 9).
+	$effect(() => {
+		const current = snapModel.current;
+		if (!current) return;
+		snapMarkerMaterial.color.setHex(SNAP_MARKER_COLORS[current.kind]);
+	});
 
 	const material = new MeshStandardNodeMaterial({
 		color: 0x9fb4c7,
@@ -371,6 +407,16 @@
 		window.__wade.allIndexed = allGeometriesIndexed(roots);
 	});
 
+	// Exposed for e2e (issue #27), same pattern as the rest of window.__wade.
+	$effect(() => {
+		if (typeof window === 'undefined' || !window.__wade) return;
+		const current = snapModel.current;
+		window.__wade.snapKind = current?.kind ?? null;
+		window.__wade.snapPoint = current
+			? [current.point.x, current.point.y, current.point.z]
+			: undefined;
+	});
+
 	function toPointerType(pointerType: string): PointerType {
 		if (pointerType === 'pen') return 'pen';
 		if (pointerType === 'touch') return 'touch';
@@ -387,6 +433,30 @@
 		const { x, y } = localPoint(event);
 		const { width, height } = size.current;
 		return picker.pick({ x, y, pointerKind, width, height, camera, objects: pickableObjects });
+	}
+
+	// Snapping (issue #27) is a hover/manipulate-channel concern, not a camera one (invariant 8) —
+	// it clears while an active gesture has locked to `navigate` (an orbit/pan in progress) or while
+	// the gizmo is being dragged (that's its own manipulate gesture already giving its own visual
+	// feedback), exactly mirroring the hover-picking gate right below this function's call site.
+	function updateSnap(event: PointerEvent, decision: GestureDecision) {
+		if (!useKernel || !camera || gizmoDragging || decision.mode === 'navigate') {
+			snapModel.setSnap(null);
+			return;
+		}
+
+		const { x, y } = localPoint(event);
+		const { width, height } = size.current;
+		const result = resolveSnapAtPointer({
+			pointer: { x, y },
+			width,
+			height,
+			camera,
+			meshes: snapMeshes,
+			gridSpacing: DEFAULT_GRID_SPACING,
+			tolerancePx: DEFAULT_SNAP_TOLERANCE_PX
+		});
+		snapModel.setSnap(result);
 	}
 
 	// Invariant 8 (navigation and editing never share a gesture): three.js's OrbitControls treats
@@ -417,6 +487,8 @@
 			pointerType,
 			pointer: { pointerId: event.pointerId, x, y }
 		});
+
+		updateSnap(event, decision);
 
 		// A gizmo drag is the `manipulate` gesture in progress (invariant 8) — never let it also
 		// drive hover picking against the underlying mesh, regardless of what mode the router
@@ -498,6 +570,22 @@
 			geometry={cylinderGeometry}
 			material={cylinderMaterial}
 			position={[60, 0, 0]}
+		/>
+	{/if}
+
+	<!-- Ground grid (issue #27): the visible surface `snapToGrid` quantizes onto, and what makes
+	     the grid-snap acceptance criterion checkable by hand, not just by reading the source. -->
+	<T.GridHelper args={[300, 300 / DEFAULT_GRID_SPACING]} />
+
+	<!-- Snap indicator: follows the pointer and locks to the nearest vertex/edge/grid point,
+	     color-coded per kind (see SNAP_MARKER_COLORS) so the "why" of a snap is visible, not
+	     magic (invariant 9). Position updates flow from updateSnap() -> snapModel, which only
+	     invalidates on an actual change — see SnapModel.svelte.ts. -->
+	{#if snapModel.current}
+		<T.Mesh
+			geometry={snapMarkerGeometry}
+			material={snapMarkerMaterial}
+			position={[snapModel.current.point.x, snapModel.current.point.y, snapModel.current.point.z]}
 		/>
 	{/if}
 {:else if geometry}

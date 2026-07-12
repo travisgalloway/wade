@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { OCCLUSION_OFFSET_PX, offsetPickPoint, toNDC } from './picking';
+import { PerspectiveCamera, Vector3 } from 'three';
+import { OCCLUSION_OFFSET_PX, offsetPickPoint, toNDC, toScreen } from './picking';
 
 describe('offsetPickPoint', () => {
 	it('leaves a mouse point untouched', () => {
@@ -35,5 +36,40 @@ describe('toNDC', () => {
 		const ndc = toNDC(800, 600, 800, 600);
 		expect(ndc.x).toBeCloseTo(1, 10);
 		expect(ndc.y).toBeCloseTo(-1, 10);
+	});
+});
+
+describe('toScreen', () => {
+	function straightCamera(width: number, height: number): PerspectiveCamera {
+		const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
+		camera.position.set(0, 0, 10);
+		camera.lookAt(0, 0, 0);
+		camera.updateMatrixWorld();
+		return camera;
+	}
+
+	it('is the inverse of toNDC: the camera target projects to the canvas center', () => {
+		const camera = straightCamera(800, 600);
+		const screen = toScreen(new Vector3(0, 0, 0), camera, 800, 600);
+
+		expect(screen).not.toBeNull();
+		expect(screen!.x).toBeCloseTo(400, 5);
+		expect(screen!.y).toBeCloseTo(300, 5);
+	});
+
+	it('maps a point above and left of center to the top-left quadrant', () => {
+		const camera = straightCamera(800, 600);
+		const screen = toScreen(new Vector3(-2, 2, 0), camera, 800, 600);
+
+		expect(screen).not.toBeNull();
+		expect(screen!.x).toBeLessThan(400);
+		expect(screen!.y).toBeLessThan(300);
+	});
+
+	it('returns null for a point behind the camera', () => {
+		const camera = straightCamera(800, 600);
+		const behind = toScreen(new Vector3(0, 0, 20), camera, 800, 600);
+
+		expect(behind).toBeNull();
 	});
 });

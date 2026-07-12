@@ -1,7 +1,15 @@
 // three-mesh-bvh hover + click selection. CPU-side and renderer-agnostic — raycasting against a
 // BVH is plain geometry math, unaffected by whether the active backend is WebGPU or the WebGL2
 // fallback (invariant 5 is a renderer concern; this module doesn't care).
-import { BufferGeometry, Mesh, Raycaster, Vector2, type Camera, type Object3D } from 'three';
+import {
+	BufferGeometry,
+	Mesh,
+	Raycaster,
+	Vector2,
+	Vector3,
+	type Camera,
+	type Object3D
+} from 'three';
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from 'three-mesh-bvh';
 
 let installed = false;
@@ -51,6 +59,23 @@ export function offsetPickPoint(point: ScreenPoint): { x: number; y: number } {
 /** Converts a CSS-pixel canvas coordinate to normalized device coordinates for `Raycaster`. */
 export function toNDC(x: number, y: number, width: number, height: number): Vector2 {
 	return new Vector2((x / width) * 2 - 1, -(y / height) * 2 + 1);
+}
+
+/**
+ * Converts a world-space point to CSS-pixel canvas coordinates — the inverse of `toNDC`, and what
+ * snapping.ts (issue #27) uses to score how close a candidate snap point is to the pointer, in the
+ * same screen-space units its tolerance is expressed in. Returns `null` when the point projects
+ * behind the camera (`z > 1` in NDC space), since a pixel position wouldn't be meaningful there.
+ */
+export function toScreen(
+	point: Vector3,
+	camera: Camera,
+	width: number,
+	height: number
+): { x: number; y: number } | null {
+	const ndc = point.clone().project(camera);
+	if (ndc.z > 1) return null;
+	return { x: ((ndc.x + 1) / 2) * width, y: ((1 - ndc.y) / 2) * height };
 }
 
 export interface PickParams {
