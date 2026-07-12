@@ -57,9 +57,12 @@ export const BOLT_POSITIONS: readonly Vector3[] = [
 ];
 
 /**
- * Builds the bolt pattern as one `InstancedMesh` — one geometry, one material, one draw call
- * regardless of how many positions are supplied (#48's "repeated instances render as a single draw
- * call"). The caller owns disposal of both the returned mesh and its geometry.
+ * Builds the bolt pattern as one `InstancedMesh` — one geometry, one material, and a single
+ * `drawElementsInstanced` call regardless of how many positions are supplied (#48's "repeated
+ * instances render as a single draw call"). Confirmed by counting real GL draws, not inferred:
+ * `renderer.info.render.drawCalls` reads 3 for the whole scene (bracket + bolts + one
+ * renderer-internal fullscreen pass), and that total is independent of instance count — see the
+ * draw-call test in e2e/viewport.e2e.ts. The caller owns disposal of both the mesh and its geometry.
  */
 export function createBoltInstances(
 	positions: readonly Vector3[],

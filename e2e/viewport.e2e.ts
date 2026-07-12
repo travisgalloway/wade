@@ -211,7 +211,21 @@ async function readInstancingStats(page: Page) {
 	return page.evaluate(() => (window as GizmoWindow).__wade);
 }
 
-test('the bolt pattern (issue #48) collapses to a small, fixed number of draw calls — not one per instance — and every viewport geometry is indexed', async ({
+// The scene draws in exactly THREE calls per frame, whatever `boltCount` is. Verified by patching
+// the WebGL2 context and counting real GL draws:
+//
+//   1  drawElements          — the bracket mesh
+//   1  drawElementsInstanced — ALL bolts, in a single instanced draw (this is issue #48's claim)
+//   1  drawArrays            — a renderer-internal fullscreen pass in WebGPURenderer's output path.
+//                              Non-indexed, so by construction it is not our geometry: every
+//                              geometry we create is indexed, and `allIndexed` below asserts it.
+//
+// Asserting the exact number rather than a loose "fewer draws than instances" bound is deliberate:
+// a loose bound would still pass if the bolts silently regressed from one instanced draw to two,
+// which is precisely the regression this test exists to catch.
+const EXPECTED_DRAW_CALLS = 3;
+
+test('the bolt pattern (issue #48) renders every instance in one instanced draw call, and every viewport geometry is indexed', async ({
 	page
 }) => {
 	await page.goto('/');
@@ -221,18 +235,17 @@ test('the bolt pattern (issue #48) collapses to a small, fixed number of draw ca
 	const first = await readInstancingStats(page);
 	const boltCount = first?.boltCount ?? 0;
 
-	// More than one bolt instance, otherwise "collapses to far fewer draws than instances" would
-	// be true for an uninteresting reason.
+	// More than one instance, otherwise "N instances collapse to one draw" holds trivially.
 	expect(boltCount).toBeGreaterThan(1);
 
-	// The scene's total draw calls (bracket mesh + the bolts' single InstancedMesh) stay well
-	// under one-per-bolt-instance. If instancing were broken (e.g. one Mesh per bolt instead of
-	// one InstancedMesh), this would scale up toward/past boltCount instead of staying small.
-	expect(first?.drawCalls ?? -1).toBeLessThan(boltCount);
+	// The load-bearing assertion: draw calls do not scale with instance count. Were instancing
+	// broken (one Mesh per bolt), this would be 2 + boltCount rather than 3.
+	expect(first?.drawCalls).toBe(EXPECTED_DRAW_CALLS);
+	expect(EXPECTED_DRAW_CALLS).toBeLessThan(boltCount);
 
-	// Stable across repeated frames, not a one-off number from a specific render.
+	// Stable across repeated frames, not a one-off from a particular render.
 	const second = await readInstancingStats(page);
-	expect(second?.drawCalls).toBe(first?.drawCalls);
+	expect(second?.drawCalls).toBe(EXPECTED_DRAW_CALLS);
 
 	expect(first?.allIndexed).toBe(true);
 });
