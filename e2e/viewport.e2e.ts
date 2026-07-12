@@ -85,3 +85,89 @@ test('?forceWebGL=1 still renders (WebGL2 fallback path)', async ({ page }) => {
 
 	expect(await renderCount(page)).toBeGreaterThan(0);
 });
+
+// Selection/hover (issues #16-#18): picking is CPU-side raycasting against the BVH built in
+// src/lib/viewport/picking.ts and is unaffected by which graphics backend is active, so exercising
+// it under the WebGL2-fallback 'chromium' project alone is sufficient — no need to duplicate this
+// in webgpu.e2e.ts.
+
+type SelectionWindow = { __wade?: { selected?: boolean; hovered?: boolean } };
+
+function readSelected(page: Page) {
+	return page.evaluate(() => (window as SelectionWindow).__wade?.selected ?? false);
+}
+
+function readHovered(page: Page) {
+	return page.evaluate(() => (window as SelectionWindow).__wade?.hovered ?? false);
+}
+
+/**
+ * The sample part (scripts/make-sample-part.ts) is a deliberately *asymmetric* L-bracket, so the
+ * exact center of its framed bounding box — where frameBox.ts points the camera — is not
+ * guaranteed to land on solid material (it may fall in the open space next to the upright wall).
+ * Rather than bake the bracket's internal shape into this test, scan a grid over the central
+ * region of the canvas (framing's own padding keeps some margin around the object, so the grid
+ * stays inside `[0.2, 0.8]` of each axis) using `probe`, stopping at the first point that reads
+ * true. Used for both click-to-select and hover, which share the same underlying pick.
+ */
+async function scanForHit(
+	page: Page,
+	act: (x: number, y: number) => Promise<void>,
+	probe: (page: Page) => Promise<boolean>
+): Promise<{ x: number; y: number }> {
+	const box = await page.locator('canvas').boundingBox();
+	if (!box) throw new Error('canvas has no bounding box');
+
+	const steps = [0.2, 0.35, 0.5, 0.65, 0.8];
+	for (const fy of steps) {
+		for (const fx of steps) {
+			const x = box.x + box.width * fx;
+			const y = box.y + box.height * fy;
+			await act(x, y);
+			if (await probe(page)) return { x, y };
+		}
+	}
+	throw new Error('no grid point over the canvas hit the sample part');
+}
+
+test('clicking the framed model selects it; clicking empty space deselects it', async ({
+	page
+}) => {
+	await page.goto('/');
+	await waitForFirstFrame(page);
+	await waitForRenderCountToSettle(page);
+
+	// A single mouse pointer with negligible movement resolves to the router's `manipulate`
+	// channel, which runs a selection pick on release.
+	await scanForHit(page, (x, y) => page.mouse.click(x, y), readSelected);
+
+	// A corner well outside the framed (and padded) model's screen footprint misses it entirely.
+	const box = await page.locator('canvas').boundingBox();
+	if (!box) throw new Error('canvas has no bounding box');
+	await page.mouse.click(box.x + box.width * 0.02, box.y + box.height * 0.02);
+	await page.waitForFunction(() => (window as SelectionWindow).__wade?.selected === false);
+});
+
+test('hovering the model sets hover state without selecting it, and is idempotent for invalidation', async ({
+	page
+}) => {
+	await page.goto('/');
+	await waitForFirstFrame(page);
+	const idleCount = await waitForRenderCountToSettle(page);
+
+	// A plain mouse move with no button held never reaches the router's mouse-gesture tracking
+	// (there is no matching 'down'), so `decision.mode` stays `null` — not `navigate` — and hover
+	// picking runs, without ever selecting anything.
+	const hit = await scanForHit(page, (x, y) => page.mouse.move(x, y), readHovered);
+	expect(await readSelected(page)).toBe(false);
+
+	// Hover picking must not invalidate on every pointermove, only when the hovered object
+	// actually changes (invariant 2): once settled, repeating the same move must not advance
+	// renderCount further.
+	const settledCount = await waitForRenderCountToSettle(page);
+	expect(settledCount).toBeGreaterThanOrEqual(idleCount);
+
+	await page.mouse.move(hit.x, hit.y);
+	await page.waitForTimeout(200);
+	expect(await renderCount(page)).toBe(settledCount);
+});
