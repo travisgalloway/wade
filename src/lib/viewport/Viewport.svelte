@@ -6,7 +6,7 @@
 	import { Canvas } from '@threlte/core';
 	import { WebGPURenderer } from 'three/webgpu';
 	import { settings } from '$lib/settings/settings.svelte';
-	import { instrumentRenderer } from './renderLoop';
+	import { instrumentRenderer, publishBackend } from './renderLoop';
 	import Scene from './Scene.svelte';
 
 	// Starts 'manual' so no frame can be issued before renderer.init() resolves (#12); flips to
@@ -30,6 +30,9 @@
 				instrumentRenderer(renderer);
 
 				renderer.init().then(() => {
+					// The backend is only decided once init resolves — WebGPURenderer silently falls back
+					// to WebGL2 when WebGPU is unavailable or forceWebGL is set.
+					publishBackend(renderer);
 					renderMode = 'on-demand';
 				});
 
