@@ -3,6 +3,7 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
+	"packageManager": "pnpm@10.14.0",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
@@ -13,7 +14,7 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run && npm run test:e2e",
+		"test": "pnpm test:unit --run && pnpm test:e2e",
 		"test:e2e": "playwright install && playwright test"
 	},
 	"devDependencies": {
