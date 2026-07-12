@@ -14,7 +14,7 @@ export type Backend = 'webgpu' | 'webgl2';
 
 declare global {
 	interface Window {
-		__wade?: { renderCount: number; backend?: Backend };
+		__wade?: { renderCount: number; backend?: Backend; selected?: boolean; hovered?: boolean };
 	}
 }
 
@@ -54,7 +54,7 @@ export function publishBackend(renderer: Renderer): Backend {
 	const resolved = 'backend' in renderer ? (renderer.backend as Partial<WebGPUBackend>) : undefined;
 	const backend: Backend = resolved?.isWebGPUBackend === true ? 'webgpu' : 'webgl2';
 
-	window.__wade = { renderCount: window.__wade?.renderCount ?? 0, backend };
+	window.__wade = { renderCount: 0, ...window.__wade, backend };
 	if (import.meta.env.DEV) {
 		console.debug(`[wade] backend: ${backend}`);
 	}
