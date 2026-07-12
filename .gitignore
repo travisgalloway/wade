@@ -27,3 +27,6 @@ test-results
 # Claude Code
 .claude/plans/
 .claude/automerge-active
+.claude/work-active
+.claude/work-active.rewakes
+.claude/scheduled_tasks.lock
