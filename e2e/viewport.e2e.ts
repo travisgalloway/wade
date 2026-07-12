@@ -6,6 +6,12 @@ import { expect, test, type Page } from '@playwright/test';
 // backend-agnostic — "a frame was rendered" (window.__wade.renderCount, from
 // src/lib/viewport/renderLoop.ts) plus the on-demand invariant. Proving WebGPU is the *default*
 // backend is webgpu.e2e.ts's job, under the sibling 'webgpu' project.
+//
+// Every navigation here goes to `?kernel=off` (issue #25): this suite predates the kernel and
+// exercises exactly the Phase 1 scene (STL bracket + bolts) — it must stay fast and untouched
+// rather than waiting on the 22 MB occt-wasm module. The kernel-driven scene has its own suite,
+// e2e/kernel.e2e.ts, under its own longer-timeout Playwright project.
+const VIEWPORT_URL = '/?kernel=off';
 
 function renderCount(page: Page) {
 	return page.evaluate(
@@ -55,14 +61,14 @@ async function dragOrbit(page: Page) {
 }
 
 test('boots and renders a frame', async ({ page }) => {
-	await page.goto('/');
+	await page.goto(VIEWPORT_URL);
 	await waitForFirstFrame(page);
 
 	expect(await renderCount(page)).toBeGreaterThan(0);
 });
 
 test('renders on demand: idle stays flat, an orbit drag advances it', async ({ page }) => {
-	await page.goto('/');
+	await page.goto(VIEWPORT_URL);
 	await waitForFirstFrame(page);
 	const idleCount = await waitForRenderCountToSettle(page);
 
@@ -80,7 +86,7 @@ test('renders on demand: idle stays flat, an orbit drag advances it', async ({ p
 });
 
 test('?forceWebGL=1 still renders (WebGL2 fallback path)', async ({ page }) => {
-	await page.goto('/?forceWebGL=1');
+	await page.goto('/?forceWebGL=1&kernel=off');
 	await waitForFirstFrame(page);
 
 	expect(await renderCount(page)).toBeGreaterThan(0);
@@ -133,7 +139,7 @@ async function scanForHit(
 test('clicking the framed model selects it; clicking empty space deselects it', async ({
 	page
 }) => {
-	await page.goto('/');
+	await page.goto(VIEWPORT_URL);
 	await waitForFirstFrame(page);
 	await waitForRenderCountToSettle(page);
 
@@ -151,7 +157,7 @@ test('clicking the framed model selects it; clicking empty space deselects it', 
 test('hovering the model sets hover state without selecting it, and is idempotent for invalidation', async ({
 	page
 }) => {
-	await page.goto('/');
+	await page.goto(VIEWPORT_URL);
 	await waitForFirstFrame(page);
 	const idleCount = await waitForRenderCountToSettle(page);
 
@@ -185,7 +191,7 @@ function readGizmoVisible(page: Page) {
 test('the transform gizmo appears on selection and disappears when deselected', async ({
 	page
 }) => {
-	await page.goto('/');
+	await page.goto(VIEWPORT_URL);
 	await waitForFirstFrame(page);
 	await waitForRenderCountToSettle(page);
 
@@ -228,7 +234,7 @@ const EXPECTED_DRAW_CALLS = 3;
 test('the bolt pattern (issue #48) renders every instance in one instanced draw call, and every viewport geometry is indexed', async ({
 	page
 }) => {
-	await page.goto('/');
+	await page.goto(VIEWPORT_URL);
 	await waitForFirstFrame(page);
 	await waitForRenderCountToSettle(page);
 
