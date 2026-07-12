@@ -2,15 +2,16 @@
 // indexed BufferGeometry.
 //
 // Shaped as a seam (invariant 4): this returns a plain geometry payload, not a three.js Mesh tied
-// to a particular material, so that in Phase 2 a `MeshPayload` produced by `KernelClient` can be
-// swapped in behind the same `{ geometry }` shape without touching the render path in
-// Viewport.svelte.
+// to a particular material, so that in Phase 2 a `MeshPayload` produced by `KernelClient` (see
+// `src/lib/kernel/types.ts` — that's the kernel's wire type now; this one was renamed to
+// `SampleMesh` to free the name up, issue #23) can be swapped in behind the same `{ geometry }`
+// shape without touching the render path in Viewport.svelte.
 import { base } from '$app/paths';
 import type { BufferGeometry } from 'three';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-export interface MeshPayload {
+export interface SampleMesh {
 	geometry: BufferGeometry;
 }
 
@@ -22,7 +23,7 @@ const SAMPLE_PART_URL = `${base}/models/sample-part.stl`;
  * satisfying issue #48's "all viewport geometry is indexed" requirement — then recomputes vertex
  * normals across the now-shared vertices for correct smooth shading.
  */
-export async function loadSampleMesh(): Promise<MeshPayload> {
+export async function loadSampleMesh(): Promise<SampleMesh> {
 	const loader = new STLLoader();
 	const raw = await loader.loadAsync(SAMPLE_PART_URL);
 
