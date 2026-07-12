@@ -37,5 +37,34 @@ export default defineConfig(
 		// Override or add rule settings here, such as:
 		// 'svelte/button-has-type': 'error'
 		rules: {}
+	},
+	{
+		// Architecture invariant 1 (issue #1): no brepjs/OCCT symbol may execute on the main
+		// thread — `kernel.worker.ts` is the one file allowed to name either package. Using the
+		// base (non-TS) `no-restricted-imports` rather than `@typescript-eslint/no-restricted-
+		// imports` is deliberate: the base rule also flags `import type`, so "no brepjs symbol
+		// reachable from the main thread" stays true even for type-only imports, and the
+		// invariant is defensible as "the string `brepjs` appears in exactly one file" — a claim
+		// CI (`pnpm lint`) actually checks, not just a comment.
+		files: ['src/**'],
+		ignores: ['src/lib/kernel/kernel.worker.ts'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{ patterns: ['brepjs', 'brepjs/*', 'occt-wasm', 'occt-wasm/*'] }
+			]
+		}
+	},
+	{
+		// The worker has no DOM, no renderer, and no SvelteKit runtime — it only ever talks to
+		// the main thread through the typed `KernelRequest`/`KernelResult` wire contract in
+		// `./types`, never by reaching for app-side modules directly.
+		files: ['src/lib/kernel/kernel.worker.ts'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{ patterns: ['three', 'three/*', '@threlte/*', '$app/*', '$lib/*'] }
+			]
+		}
 	}
 );
