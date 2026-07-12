@@ -5,9 +5,15 @@
 	// on-demand), it does not change per frame.
 	import { Canvas } from '@threlte/core';
 	import { WebGPURenderer } from 'three/webgpu';
+	import type { ParamsModel } from '$lib/scene/params.svelte';
 	import { settings } from '$lib/settings/settings.svelte';
 	import { instrumentRenderer, publishBackend } from './renderLoop';
 	import Scene from './Scene.svelte';
+
+	// Threaded through from +page.svelte (which owns it, since ParamsPanel — a sibling of this
+	// component — needs the same instance) down to Scene.svelte, which is the only thing inside
+	// the Canvas that actually reads it (issue #25).
+	let { paramsModel }: { paramsModel: ParamsModel } = $props();
 
 	// Starts 'manual' so no frame can be issued before renderer.init() resolves (#12); flips to
 	// 'on-demand' once it does, which is the mode invalidate() actually drives (#13).
@@ -39,7 +45,7 @@
 				return renderer;
 			}}
 		>
-			<Scene />
+			<Scene {paramsModel} />
 		</Canvas>
 	{/key}
 </div>
