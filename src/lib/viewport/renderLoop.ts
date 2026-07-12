@@ -14,8 +14,29 @@ export type Backend = 'webgpu' | 'webgl2';
 
 declare global {
 	interface Window {
-		__wade?: { renderCount: number; backend?: Backend; selected?: boolean; hovered?: boolean };
+		__wade?: {
+			renderCount: number;
+			backend?: Backend;
+			selected?: boolean;
+			hovered?: boolean;
+			/** GPU draw calls issued by the most recent `render()` call (issue #48). */
+			drawCalls?: number;
+			/** Whether every viewport-owned mesh has an indexed BufferGeometry (issue #48). */
+			allIndexed?: boolean;
+			/** Whether the transform gizmo is currently mounted (issue #19). */
+			gizmoVisible?: boolean;
+			/** Number of bolt instances drawn in the single instanced draw call (issue #48). */
+			boltCount?: number;
+		};
 	}
+}
+
+/** Reads the per-frame draw-call count. WebGPURenderer's `Info.render` exposes `drawCalls`
+ *  directly; the classic `WebGLRenderer` union member (never actually constructed by this app,
+ *  see Viewport.svelte) only has `calls`, so that's the fallback rather than `undefined`. */
+function readDrawCalls(renderer: Renderer): number {
+	const render = renderer.info.render as { drawCalls?: number; calls: number };
+	return render.drawCalls ?? render.calls;
 }
 
 /**
@@ -28,14 +49,24 @@ export function instrumentRenderer(renderer: Renderer): void {
 	let renderCount = 0;
 	window.__wade = { renderCount };
 
+	// This app drives rendering itself via invalidate()/render() (invariant 2 — no
+	// setAnimationLoop), so three.js's own per-frame reset of `renderer.info` — which only runs
+	// inside its internal animation-loop scheduler — never fires. Three.js's own docs prescribe
+	// exactly this manual reset for apps that manage their own loop; without it, `drawCalls` would
+	// only ever grow instead of reporting a single frame's count (issue #48's acceptance criterion).
+	renderer.info.autoReset = false;
+
 	const originalRender = renderer.render.bind(renderer);
 	renderer.render = (scene: Object3D, camera: Camera) => {
+		renderer.info.reset();
+		originalRender(scene, camera);
+
 		renderCount += 1;
 		window.__wade!.renderCount = renderCount;
+		window.__wade!.drawCalls = readDrawCalls(renderer);
 		if (import.meta.env.DEV) {
-			console.debug(`[wade] render #${renderCount}`);
+			console.debug(`[wade] render #${renderCount} (${window.__wade!.drawCalls} draw calls)`);
 		}
-		originalRender(scene, camera);
 	};
 }
 

@@ -171,3 +171,68 @@ test('hovering the model sets hover state without selecting it, and is idempoten
 	await page.waitForTimeout(200);
 	expect(await renderCount(page)).toBe(settledCount);
 });
+
+// Gizmo (issue #19) and instancing/batching (issue #48).
+
+type GizmoWindow = {
+	__wade?: { gizmoVisible?: boolean; drawCalls?: number; boltCount?: number; allIndexed?: boolean };
+};
+
+function readGizmoVisible(page: Page) {
+	return page.evaluate(() => (window as GizmoWindow).__wade?.gizmoVisible ?? false);
+}
+
+test('the transform gizmo appears on selection and disappears when deselected', async ({
+	page
+}) => {
+	await page.goto('/');
+	await waitForFirstFrame(page);
+	await waitForRenderCountToSettle(page);
+
+	expect(await readGizmoVisible(page)).toBe(false);
+
+	await scanForHit(page, (x, y) => page.mouse.click(x, y), readSelected);
+	await page.waitForFunction(() => (window as GizmoWindow).__wade?.gizmoVisible === true);
+
+	const box = await page.locator('canvas').boundingBox();
+	if (!box) throw new Error('canvas has no bounding box');
+	await page.mouse.click(box.x + box.width * 0.02, box.y + box.height * 0.02);
+	await page.waitForFunction(() => (window as GizmoWindow).__wade?.gizmoVisible === false);
+});
+
+/**
+ * Reads {boltCount, drawCalls} straight after a fresh render (an orbit nudge), so the numbers
+ * reflect an actual `renderer.info.render` snapshot rather than a stale value left over from
+ * whatever render happened to run last before settling.
+ */
+async function readInstancingStats(page: Page) {
+	await dragOrbit(page);
+	await page.waitForTimeout(150);
+	return page.evaluate(() => (window as GizmoWindow).__wade);
+}
+
+test('the bolt pattern (issue #48) collapses to a small, fixed number of draw calls — not one per instance — and every viewport geometry is indexed', async ({
+	page
+}) => {
+	await page.goto('/');
+	await waitForFirstFrame(page);
+	await waitForRenderCountToSettle(page);
+
+	const first = await readInstancingStats(page);
+	const boltCount = first?.boltCount ?? 0;
+
+	// More than one bolt instance, otherwise "collapses to far fewer draws than instances" would
+	// be true for an uninteresting reason.
+	expect(boltCount).toBeGreaterThan(1);
+
+	// The scene's total draw calls (bracket mesh + the bolts' single InstancedMesh) stay well
+	// under one-per-bolt-instance. If instancing were broken (e.g. one Mesh per bolt instead of
+	// one InstancedMesh), this would scale up toward/past boltCount instead of staying small.
+	expect(first?.drawCalls ?? -1).toBeLessThan(boltCount);
+
+	// Stable across repeated frames, not a one-off number from a specific render.
+	const second = await readInstancingStats(page);
+	expect(second?.drawCalls).toBe(first?.drawCalls);
+
+	expect(first?.allIndexed).toBe(true);
+});
