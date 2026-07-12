@@ -1,14 +1,21 @@
 import { defineConfig } from '@playwright/test';
 
-// Two projects, because "a frame rendered" is true on *either* graphics backend and so cannot by
+// Three projects, because "a frame rendered" is true on *either* graphics backend and so cannot by
 // itself prove invariant 5 (WebGPU by default, WebGL2 as the escape hatch). Each project pins down
-// one half of it:
+// one part of the suite:
 //
 //   chromium — no WebGPU flag, so navigator.gpu is absent and the renderer takes its automatic
 //              WebGL2 fallback. Keeps that fallback exercised rather than merely theoretical.
+//              Runs against `?kernel=off` (issue #25) — the Phase 1 scene only.
 //   webgpu   — --enable-unsafe-webgpu, which is sufficient on its own: Chrome ships a SwiftShader
 //              WebGPU backend, so a headless CI runner with no GPU still gets a real adapter — no
-//              Vulkan driver install and no GPU runner required.
+//              Vulkan driver install and no GPU runner required. Also runs against `?kernel=off`;
+//              which backend gets used is orthogonal to the kernel.
+//   kernel   — the kernel-driven parametric scene (issues #25, #26). Its own project because it's
+//              the one suite that has to wait on the ~22 MB occt-wasm module compiling on first
+//              load, so it gets a much longer default test timeout than the other two — without
+//              this, the fast suites above would either inherit that timeout needlessly or the
+//              kernel suite would flake under their tighter one.
 //
 // --enable-gpu is what decides *which* adapter you get. Headless Chromium disables the GPU by
 // default and hands back SwiftShader even on a machine with a perfectly good one; with the flag, a
@@ -28,6 +35,11 @@ export default defineConfig({
 			name: 'webgpu',
 			testMatch: '**/webgpu.e2e.ts',
 			use: { launchOptions: { args: ['--enable-unsafe-webgpu', '--enable-gpu'] } }
+		},
+		{
+			name: 'kernel',
+			testMatch: '**/kernel.e2e.ts',
+			timeout: 150_000
 		}
 	]
 });
