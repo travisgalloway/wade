@@ -111,8 +111,8 @@ Tasks
 - Add a placeholder route that renders a full-viewport container.
 
 Verification
-- `npm run build` produces a static SPA with no SSR.
-- `npm run dev` serves the shell.
+- `pnpm build` produces a static SPA with no SSR.
+- `pnpm dev` serves the shell.
 - Lint, format, and an empty test run all pass.
 
 ---

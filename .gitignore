@@ -26,3 +26,4 @@ test-results
 
 # Claude Code
 .claude/plans/
+.claude/automerge-active

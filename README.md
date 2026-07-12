@@ -7,17 +7,17 @@ A CAD PWA built with SvelteKit, brepjs/OpenCascade, and three.js WebGPU.
 Install dependencies and start the dev server:
 
 ```sh
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 ## Building
 
 ```sh
-npm run build
+pnpm build
 ```
 
-Produces a static, client-only SPA (no SSR) via `@sveltejs/adapter-static`. Preview it with `npm run preview`.
+Produces a static, client-only SPA (no SSR) via `@sveltejs/adapter-static`. Preview it with `pnpm preview`.
 
 ## Documentation
 
