@@ -16,6 +16,11 @@ import { defineConfig } from '@playwright/test';
 //              load, so it gets a much longer default test timeout than the other two — without
 //              this, the fast suites above would either inherit that timeout needlessly or the
 //              kernel suite would flake under their tighter one.
+//   snapping — vertex/edge/grid snapping (issue #27). Wired only into the kernel-driven scene (see
+//              Scene.svelte), so it navigates to `/` and waits on the same occt-wasm module as the
+//              'kernel' project — hence the same longer timeout, as its own project rather than
+//              folded into 'kernel' so a testMatch change to one can't accidentally pick up the
+//              other's spec file.
 //
 // --enable-gpu is what decides *which* adapter you get. Headless Chromium disables the GPU by
 // default and hands back SwiftShader even on a machine with a perfectly good one; with the flag, a
@@ -39,6 +44,11 @@ export default defineConfig({
 		{
 			name: 'kernel',
 			testMatch: '**/kernel.e2e.ts',
+			timeout: 150_000
+		},
+		{
+			name: 'snapping',
+			testMatch: '**/snapping.e2e.ts',
 			timeout: 150_000
 		}
 	]

@@ -35,6 +35,12 @@ declare global {
 			kernelMeshCount?: number;
 			/** The most recent kernel error message, if any (issue #25). */
 			kernelError?: string;
+			/** The kind of snap currently resolved under the pointer, or `null` when nothing is
+			 *  within tolerance (issue #27). Only populated in the kernel-driven scene, where the
+			 *  ground grid and snap-candidate meshes are wired up — see Scene.svelte. */
+			snapKind?: 'vertex' | 'edge' | 'grid' | null;
+			/** World-space coordinates of the current snap point, mirroring `snapKind` (issue #27). */
+			snapPoint?: [number, number, number];
 		};
 	}
 }
