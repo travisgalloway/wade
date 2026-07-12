@@ -13,6 +13,14 @@ export default defineConfig({
 			adapter: adapter({ fallback: 'index.html' })
 		})
 	],
+	// `format: 'es'` is required for `new Worker(new URL(...), { type: 'module' })` (issue #22) —
+	// Vite's classic/IIFE worker output can't `import` the wasm asset URL at all. The other two
+	// entries are occt-wasm's own documented Vite requirements: esbuild's dep pre-bundling rewrites
+	// the emscripten glue in ways that break it (`optimizeDeps.exclude`), and the wasm features /
+	// top-level await it relies on need a modern build target (`build.target`).
+	worker: { format: 'es' },
+	optimizeDeps: { exclude: ['occt-wasm'] },
+	build: { target: 'esnext' },
 	test: {
 		expect: { requireAssertions: true },
 		projects: [
