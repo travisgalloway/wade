@@ -21,5 +21,8 @@ Produces a static, client-only SPA (no SSR) via `@sveltejs/adapter-static`. Prev
 
 ## Documentation
 
-- [CAD PWA architecture scope](docs/cad-pwa-scope.md) — the locked-in decisions and reasoning behind the stack.
-- [Implementation plan](docs/implementation-plan.md) — the phase-by-phase build order.
+**[docs/](docs/README.md)** — start with the [architectural invariants](docs/architecture/invariants.md). Nine rules govern this codebase, most are enforced by CI, and the source cites them by number.
+
+- [Architecture](docs/README.md#architecture--how-it-works-today) — threading model, kernel, rendering, orientation, input, state.
+- [Roadmap](docs/roadmap/phases.md) — Phases 0–2 are done; Phase 3 (PWA hardening) is next.
+- [Testing](docs/guides/testing.md) and [conventions](docs/guides/conventions.md).
