@@ -2,6 +2,7 @@
 // position/target that centers and frames it. No renderer, no DOM, no Threlte — this is what
 // keeps it unit-testable in the plain node Vitest project.
 import { Box3, Sphere, Vector3 } from 'three';
+import { DEFAULT_VIEW_DIRECTION } from './orientation';
 
 export interface FramingInput {
 	/** World-space bounds of the object to frame. */
@@ -21,7 +22,7 @@ export interface FramingResult {
 	target: Vector3;
 }
 
-const DEFAULT_DIRECTION = new Vector3(1, 0.6, 1);
+const DEFAULT_DIRECTION = DEFAULT_VIEW_DIRECTION;
 const DEFAULT_PADDING = 1.2;
 
 /**

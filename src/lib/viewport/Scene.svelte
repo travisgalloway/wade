@@ -22,6 +22,7 @@
 		Box3,
 		SphereGeometry,
 		TOUCH,
+		Vector3,
 		type BufferGeometry,
 		type Mesh,
 		type InstancedMesh,
@@ -35,9 +36,11 @@
 	import { toBufferGeometry } from '$lib/kernel/geometry';
 	import { BOX_SOLID_ID, CYLINDER_SOLID_ID, type ParamsModel } from '$lib/scene/params.svelte';
 	import { settings } from '$lib/settings/settings.svelte';
+	import { createAxesIndicator } from './axes';
 	import { frameBox } from './framing';
 	import { GIZMO_SIZE } from './gizmo';
 	import { allGeometriesIndexed, BOLT_POSITIONS, createBoltInstances } from './instancing';
+	import { DEFAULT_VIEW_DIRECTION, installZUpWorld } from './orientation';
 	import { invalidateFor } from './renderLoop';
 	import { loadSampleMesh } from './sampleMesh';
 	import { buildBoundsTree, installBVHAcceleration, Picker, type PointerKind } from './picking';
@@ -56,6 +59,12 @@
 
 	// One-time global prototype patch (idempotent) — see picking.ts.
 	installBVHAcceleration();
+
+	// Makes +Z the world's up axis (idempotent) — see orientation.ts. At module scope, not in an
+	// $effect, because `Object3D.DEFAULT_UP` is copied into each instance's `up` at construction:
+	// this has to run before the camera and controls below are built, or they would stay Y-up in a
+	// Z-up world.
+	installZUpWorld();
 
 	const { invalidate, dom, size } = useThrelte();
 	const orbitControls = useOrbitControls();
@@ -81,8 +90,18 @@
 	let useKernel = $derived(settings.kernel && !kernelFatal);
 
 	let boltMesh = $state.raw<InstancedMesh>();
+	let axesObject = $state.raw<Object3D>();
 	let transformControls = $state.raw<TransformControlsImpl>();
 	let gizmoDragging = $state(false);
+
+	// The camera's opening pose, before anything is loaded and `frameBox` takes over. Derived from
+	// the same 3/4 direction `frameBox` defaults to (orientation.ts), so the initial view and the
+	// framed view look at the scene from the same angle rather than snapping between two.
+	const INITIAL_CAMERA_DISTANCE = 10;
+	const initialCameraPosition = DEFAULT_VIEW_DIRECTION.clone()
+		.normalize()
+		.multiplyScalar(INITIAL_CAMERA_DISTANCE)
+		.toArray();
 
 	// A stable local binding for the template's {#if} to narrow against, and for the pointer
 	// handlers below to read without going through the SceneModel getter twice.
@@ -373,6 +392,56 @@
 		};
 	});
 
+	// The origin axes indicator (see axes.ts). Built in an `$effect`, never at module scope, because
+	// its labels are canvas textures and `document` doesn't exist during SvelteKit's SSR/shell pass
+	// — the same constraint that keeps `new Worker` out of module scope above. Only mounted in the
+	// kernel scene, alongside the grid, for the draw-call reason documented on `snapMeshes`.
+	$effect(() => {
+		if (!useKernel) return;
+
+		const axes = createAxesIndicator();
+		axesObject = axes.object;
+		invalidateFor(invalidate, 'model');
+
+		return () => {
+			axes.dispose();
+			axesObject = undefined;
+		};
+	});
+
+	// Exposed for e2e (orientation.e2e.ts), same pattern as the rest of window.__wade.
+	$effect(() => {
+		if (typeof window === 'undefined' || !window.__wade) return;
+		window.__wade.axesPresent = axesObject !== undefined;
+	});
+
+	// Screen-space projection hook for e2e (orientation.e2e.ts). Reads the camera at call time
+	// rather than capturing a snapshot, so a test can orbit and re-project against the moved camera.
+	$effect(() => {
+		const activeCamera = camera;
+		if (!activeCamera) return;
+		if (typeof window === 'undefined' || !window.__wade) return;
+
+		window.__wade.projectToNdc = (point) => {
+			const projected = new Vector3(...point).project(activeCamera);
+			return [projected.x, projected.y];
+		};
+	});
+
+	// The box's world-space size, republished on every re-tessellation. This is what makes the
+	// up-axis convention assertable from a test: `boxExtents[2]` is the Height param, because Height
+	// is Z (orientation.ts). Reads `boxGeometry` explicitly — the mesh object is reused across
+	// updates while its geometry is swapped, so depending on `boxMesh` alone would not re-run this.
+	$effect(() => {
+		const mesh = boxMesh;
+		const geometry = boxGeometry;
+		if (!mesh || !geometry) return;
+		if (typeof window === 'undefined' || !window.__wade) return;
+
+		const size = new Box3().setFromObject(mesh).getSize(new Vector3());
+		window.__wade.boxExtents = [size.x, size.y, size.z];
+	});
+
 	// <TransformControls>'s own autoPauseControls (default true) already disables the registered
 	// OrbitControls for as long as `dragging` is true — that alone is what stops a gizmo drag from
 	// also orbiting the camera (invariant 8). This listener tracks the same flag locally so the
@@ -541,7 +610,7 @@
 <T.PerspectiveCamera
 	makeDefault
 	bind:ref={camera}
-	position={[6, 4.5, 6]}
+	position={initialCameraPosition}
 	fov={50}
 	near={0.1}
 	far={2000}
@@ -552,8 +621,11 @@
 	<OrbitControls touches={{ ONE: null, TWO: TOUCH.DOLLY_PAN }} />
 </T.PerspectiveCamera>
 
-<T.HemisphereLight intensity={0.75} groundColor={0x3a3a3a} />
-<T.DirectionalLight position={[6, 10, 4]} intensity={1.4} />
+<!-- HemisphereLight shines from its own +Y by default; in this Z-up world (orientation.ts) that
+     would light the scene sideways, so it's rotated to put its sky hemisphere overhead. The
+     directional key light is simply positioned high on +Z instead. -->
+<T.HemisphereLight intensity={0.75} groundColor={0x3a3a3a} rotation={[Math.PI / 2, 0, 0]} />
+<T.DirectionalLight position={[6, -4, 10]} intensity={1.4} />
 
 {#if useKernel}
 	{#if boxGeometry}
@@ -574,8 +646,18 @@
 	{/if}
 
 	<!-- Ground grid (issue #27): the visible surface `snapToGrid` quantizes onto, and what makes
-	     the grid-snap acceptance criterion checkable by hand, not just by reading the source. -->
-	<T.GridHelper args={[300, 300 / DEFAULT_GRID_SPACING]} />
+	     the grid-snap acceptance criterion checkable by hand, not just by reading the source.
+	     GridHelper is authored in the XZ plane (three.js's Y-up default); rotating it a quarter turn
+	     about X lays it on the XY plane (Z = 0), which is this world's ground — see orientation.ts
+	     and snapping.ts's GROUND_PLANE, the two of which must agree for a grid snap to land on the
+	     line the user actually sees. -->
+	<T.GridHelper args={[300, 300 / DEFAULT_GRID_SPACING]} rotation={[Math.PI / 2, 0, 0]} />
+
+	<!-- Origin axes indicator: labelled X/Y/Z triad at the center of the grid, so the Z-up
+	     convention is legible in the viewport rather than only in orientation.ts. -->
+	{#if axesObject}
+		<T is={axesObject} />
+	{/if}
 
 	<!-- Snap indicator: follows the pointer and locks to the nearest vertex/edge/grid point,
 	     color-coded per kind (see SNAP_MARKER_COLORS) so the "why" of a snap is visible, not

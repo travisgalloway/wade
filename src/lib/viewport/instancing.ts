@@ -24,6 +24,11 @@ const HEAD_SEGMENTS = 6; // hex head
  * One bolt: a hex-head cylinder fused to a shaft cylinder. three.js's primitive geometries are
  * already indexed, but `mergeGeometries` + `mergeVertices` welds the two into a single indexed
  * `BufferGeometry` rather than leaving it as an implicit accident of the primitives used.
+ *
+ * Assembled along +Y (three.js's `CylinderGeometry` is Y-axis aligned, and there is no way to ask
+ * it for another axis), then rotated onto +Z at the end so the bolt stands up in this app's
+ * right-handed Z-up world — see viewport/orientation.ts. Rotating the geometry once, here, is what
+ * keeps every *instance* transform below a plain translation.
  */
 export function buildBoltGeometry(): BufferGeometry {
 	const shaft = new CylinderGeometry(SHAFT_RADIUS, SHAFT_RADIUS, SHAFT_HEIGHT, 16);
@@ -38,6 +43,7 @@ export function buildBoltGeometry(): BufferGeometry {
 	}
 
 	const indexed = mergeVertices(merged);
+	indexed.rotateX(Math.PI / 2); // +Y (three.js's cylinder axis) -> +Z (this world's up axis)
 	indexed.computeVertexNormals();
 	return indexed;
 }
@@ -45,15 +51,16 @@ export function buildBoltGeometry(): BufferGeometry {
 /**
  * World-space positions for the bracket's fastener pattern: two rows of three along the base
  * plate, whose 120x70 footprint (see scripts/make-sample-part.ts) is centered on the origin with
- * its top face at y = 0.
+ * its top face at z = 0. On the ground plane (XY, Z = 0) — this world is Z-up, see
+ * viewport/orientation.ts.
  */
 export const BOLT_POSITIONS: readonly Vector3[] = [
-	new Vector3(-30, 0, -20),
-	new Vector3(0, 0, -20),
-	new Vector3(30, 0, -20),
-	new Vector3(-30, 0, 20),
-	new Vector3(0, 0, 20),
-	new Vector3(30, 0, 20)
+	new Vector3(-30, -20, 0),
+	new Vector3(0, -20, 0),
+	new Vector3(30, -20, 0),
+	new Vector3(-30, 20, 0),
+	new Vector3(0, 20, 0),
+	new Vector3(30, 20, 0)
 ];
 
 /**

@@ -21,6 +21,10 @@ import { defineConfig } from '@playwright/test';
 //              'kernel' project — hence the same longer timeout, as its own project rather than
 //              folded into 'kernel' so a testMatch change to one can't accidentally pick up the
 //              other's spec file.
+//   orientation — the world's right-handed Z-up convention (viewport/orientation.ts): that the box
+//              params move the axes they claim to, that the ground plane really is Z = 0, and that
+//              the axes indicator is mounted only in the kernel scene. Kernel-driven, so same
+//              longer timeout and same own-project rationale as 'snapping'.
 //
 // --enable-gpu is what decides *which* adapter you get. Headless Chromium disables the GPU by
 // default and hands back SwiftShader even on a machine with a perfectly good one; with the flag, a
@@ -49,6 +53,11 @@ export default defineConfig({
 		{
 			name: 'snapping',
 			testMatch: '**/snapping.e2e.ts',
+			timeout: 150_000
+		},
+		{
+			name: 'orientation',
+			testMatch: '**/orientation.e2e.ts',
 			timeout: 150_000
 		}
 	]

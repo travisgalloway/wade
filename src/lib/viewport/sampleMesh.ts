@@ -22,12 +22,18 @@ const SAMPLE_PART_URL = `${base}/models/sample-part.stl`;
  * runs it through `mergeVertices()` to weld coincident vertices into an indexed BufferGeometry —
  * satisfying issue #48's "all viewport geometry is indexed" requirement — then recomputes vertex
  * normals across the now-shared vertices for correct smooth shading.
+ *
+ * The asset itself is authored Y-up (scripts/make-sample-part.ts predates this app choosing an
+ * up axis), so it is rotated onto Z-up here, at the boundary, rather than regenerating the
+ * committed STL — see viewport/orientation.ts. The kernel's own meshes need no such rotation:
+ * OCCT is already right-handed Z-up, which is exactly why that convention was chosen.
  */
 export async function loadSampleMesh(): Promise<SampleMesh> {
 	const loader = new STLLoader();
 	const raw = await loader.loadAsync(SAMPLE_PART_URL);
 
 	const geometry = mergeVertices(raw);
+	geometry.rotateX(Math.PI / 2); // the asset's +Y (up) -> this world's +Z (up)
 	geometry.computeVertexNormals();
 
 	return { geometry };
