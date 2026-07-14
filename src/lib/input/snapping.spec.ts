@@ -40,9 +40,9 @@ function triangleGeometry(): BufferGeometry {
 }
 
 describe('snapToGrid', () => {
-	it('rounds x/z to the nearest grid line and leaves y untouched', () => {
-		const snapped = snapToGrid(new Vector3(23, 7, -18), 10);
-		expect(snapped.toArray()).toEqual([20, 7, -20]);
+	it('rounds x/y to the nearest grid line and leaves z untouched', () => {
+		const snapped = snapToGrid(new Vector3(23, -18, 7), 10);
+		expect(snapped.toArray()).toEqual([20, -20, 7]);
 	});
 
 	it('rounds up at the midpoint between two grid lines', () => {
@@ -181,12 +181,27 @@ describe('resolveSnap', () => {
 });
 
 describe('resolveSnapAtPointer', () => {
+	/** Looks straight down -Z at (x, y, 0), where `triangleGeometry` lives. The ground plane is now
+	 *  Z = 0 too (the world is Z-up — see viewport/orientation.ts), so unlike the Y-up version of
+	 *  this helper, the view ray *does* cross the ground and a grid candidate is always in play.
+	 *  That's deliberate rather than worked around: the vertex/edge cases below now assert that
+	 *  `resolveSnap`'s priority ordering keeps the higher-precision candidate winning even when a
+	 *  grid candidate resolves to the very same screen point. */
 	function straightCamera(x: number, y: number, width: number, height: number): PerspectiveCamera {
 		const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
-		// No tilt: direction stays (0, 0, -1) regardless of x/y, so the ground plane (Y = 0) is
-		// never crossed and a grid candidate can't sneak into a vertex/edge-focused test.
 		camera.position.set(x, y, 10);
 		camera.lookAt(x, y, 0);
+		camera.updateMatrixWorld();
+		return camera;
+	}
+
+	/** Aimed up and away from the ground, so the view ray never crosses Z = 0 and there is no grid
+	 *  candidate at all — the only way to test "nothing is within tolerance" now that the ground
+	 *  plane is the same plane the test triangle sits in. */
+	function skyCamera(x: number, y: number, width: number, height: number): PerspectiveCamera {
+		const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
+		camera.position.set(x, y, 10);
+		camera.lookAt(x, y, 20);
 		camera.updateMatrixWorld();
 		return camera;
 	}
@@ -241,7 +256,7 @@ describe('resolveSnapAtPointer', () => {
 		const width = 800;
 		const height = 600;
 		const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
-		camera.position.set(0, 10, 10);
+		camera.position.set(0, -10, 10);
 		camera.lookAt(0, 0, 0);
 		camera.updateMatrixWorld();
 
@@ -256,9 +271,10 @@ describe('resolveSnapAtPointer', () => {
 		});
 
 		expect(result?.kind).toBe('grid');
-		expect(result?.point.y).toBe(0);
+		// On the ground plane, which is Z = 0 in this Z-up world, with X and Y quantized to the grid.
+		expect(result?.point.z).toBe(0);
 		expect(result!.point.x % 10).toBeCloseTo(0, 10);
-		expect(result!.point.z % 10).toBeCloseTo(0, 10);
+		expect(result!.point.y % 10).toBeCloseTo(0, 10);
 	});
 
 	it('returns null when nothing is within tolerance', () => {
@@ -266,7 +282,7 @@ describe('resolveSnapAtPointer', () => {
 			pointer: { x: 400, y: 300 },
 			width: 800,
 			height: 600,
-			camera: straightCamera(1000, 1000, 800, 600),
+			camera: skyCamera(1000, 1000, 800, 600),
 			meshes: [],
 			gridSpacing: 10,
 			tolerancePx: 1

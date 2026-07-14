@@ -28,6 +28,7 @@ import {
 	type Object3D
 } from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
+import { GROUND_NORMAL } from '$lib/viewport/orientation';
 import { toNDC, toScreen } from '$lib/viewport/picking';
 
 /** What a resolved snap locked onto — carried alongside the point so UI can show *why* it snapped
@@ -59,17 +60,17 @@ export const DEFAULT_GRID_SPACING = 10;
 export const DEFAULT_SNAP_TOLERANCE_PX = 20;
 
 /**
- * Grid snap: quantizes `point`'s X/Z to the nearest multiple of `spacing`, leaving Y untouched.
- * The ground grid is the XZ plane (Y = 0), matching three.js's Y-up convention and where the
- * kernel scene's solids already sit (Scene.svelte positions both at y = 0) — but this function
- * itself makes no assumption about Y being zero, so it composes with a point already projected
- * onto any horizontal plane.
+ * Grid snap: quantizes `point`'s X/Y to the nearest multiple of `spacing`, leaving Z untouched.
+ * The ground grid is the XY plane (Z = 0) — the world is right-handed Z-up (see
+ * viewport/orientation.ts), and that is where the kernel scene's solids already sit (Scene.svelte
+ * positions both at z = 0). This function itself makes no assumption about Z being zero, so it
+ * composes with a point already projected onto any horizontal plane.
  */
 export function snapToGrid(point: Vector3, spacing: number): Vector3 {
 	return new Vector3(
 		Math.round(point.x / spacing) * spacing,
-		point.y,
-		Math.round(point.z / spacing) * spacing
+		Math.round(point.y / spacing) * spacing,
+		point.z
 	);
 }
 
@@ -197,9 +198,10 @@ export function resolveSnap(candidates: SnapCandidate[], tolerancePx: number): S
 	return null;
 }
 
-/** The ground grid lives on the XZ plane (Y = 0) — three.js's Y-up convention, and where the
- *  kernel scene's solids already sit (Scene.svelte positions both at y = 0). */
-const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
+/** The ground grid lives on the XY plane (Z = 0) — the world's right-handed Z-up convention (see
+ *  viewport/orientation.ts), and where the kernel scene's solids already sit (Scene.svelte
+ *  positions both at z = 0). */
+const GROUND_PLANE = new Plane(GROUND_NORMAL, 0);
 
 export interface SnapPointerQuery {
 	/** Pointer position in CSS pixels, relative to the canvas. */

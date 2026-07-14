@@ -41,6 +41,27 @@ declare global {
 			snapKind?: 'vertex' | 'edge' | 'grid' | null;
 			/** World-space coordinates of the current snap point, mirroring `snapKind` (issue #27). */
 			snapPoint?: [number, number, number];
+			/** World-space [x, y, z] size of the kernel box's bounding box. The one number that can
+			 *  actually catch an up-axis regression: the world is right-handed Z-up (see
+			 *  orientation.ts), so the Height param must move `z` here and nothing else. Before that
+			 *  convention existed, Height grew the box along the *screen's* horizontal instead — a bug
+			 *  every other assertion in this object was blind to. */
+			boxExtents?: [number, number, number];
+			/** Whether the origin axes indicator (axes.ts) is mounted. Deliberately observable so a
+			 *  test can pin down that it is present in the kernel scene and *absent* from the
+			 *  `?kernel=off` fallback — the latter is what keeps viewport.e2e.ts's exact-draw-call
+			 *  assertion honest. */
+			axesPresent?: boolean;
+			/** Projects a world point through the live camera to normalized device coordinates (x and
+			 *  y, each in [-1, 1], y pointing *up* the screen).
+			 *
+			 *  This is the only hook that can observe the up-axis bug that motivated orientation.ts,
+			 *  and it's worth being precise about why. That bug was never in the geometry: the kernel
+			 *  emitted a correct Z-up box, and its bounding box measured a correct [width, depth,
+			 *  height] even while the scene was Y-up. What was wrong was the *camera's* idea of up, so
+			 *  the box's height ran across the screen instead of up it. No measurement in world space
+			 *  can see that — only a projection into screen space can. */
+			projectToNdc?: (point: [number, number, number]) => [number, number];
 		};
 	}
 }
