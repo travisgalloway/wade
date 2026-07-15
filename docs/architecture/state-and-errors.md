@@ -12,6 +12,8 @@ Invariant 3, plus the cross-cutting rules for how failures surface.
 
 These three never merge. Geometry does not enter `$state`; view models do not enter the render path; the document model does not hold `BufferGeometry`.
 
+The **document model** row is made concrete by [`document-model.md`](./document-model.md) — the N-object model with a command-shaped mutation API that replaces today's hard-wired `params.svelte.ts`. It is the keystone the manipulation and agent work depend on.
+
 **The canvas is imperative, not reactive** (invariant 3). One component owns the renderer and the scene directly. Svelte state drives the UI panels and the feature tree, never the per-frame render path. Binding reactive state that re-runs Svelte work every frame is the failure mode this invariant exists to prevent.
 
 Svelte 5 runes give fine-grained updates, which makes the split cheap to hold: keep geometry in the worker and on the GPU, and hold only lightweight view models in `$state`.
@@ -26,6 +28,8 @@ Every store is a `.svelte.ts` file — that suffix is what enables runes outside
 
   Setters clamp through pure, unit-tested functions against `BOX_LIMITS` / `CYLINDER_LIMITS`, so a slider can never send an out-of-range value to the kernel regardless of what the DOM element's own `min`/`max` say.
 
+  This generalizes into `scene/document.svelte.ts` — an array of `$state` objects rather than fixed primitives — but the two rules above (fresh-plain-object getters, clamped setters) carry over unchanged. See [`document-model.md`](./document-model.md).
+
 - **`scene/SceneModel.svelte.ts`** and **`scene/SnapModel.svelte.ts`** — use `$state.raw`, not `$state`. They hold _references_ to imperative three.js objects, never geometry and never per-frame data. Both **no-op when the value is unchanged**, which is what keeps hover and snap from reintroducing a render loop. See [`rendering.md`](./rendering.md#the-idle-quiescence-trap).
 
 - **`settings/settings.svelte.ts`** — a module-level singleton, persisted to `localStorage['wade:settings']` (write failures swallowed, for privacy mode). Read once at renderer construction, **never per frame**.
@@ -38,7 +42,7 @@ Long panels — the feature tree, the assembly tree — should be **virtualized*
 
 ## Where the shared model is created
 
-`+page.svelte` creates the params model, not `Scene.svelte`. `ParamsPanel` (plain DOM) and `Scene` (inside the Threlte `<Canvas>`) are **sibling trees**, and Svelte context flows down only one tree. So the shared instance is created above both and passed as a prop.
+`+page.svelte` creates the params model (soon the [document model](./document-model.md)), not `Scene.svelte`. `ParamsPanel` (plain DOM) and `Scene` (inside the Threlte `<Canvas>`) are **sibling trees**, and Svelte context flows down only one tree. So the shared instance is created above both and passed as a prop.
 
 ## Error handling
 

@@ -90,5 +90,6 @@ All DOM and three.js scene-graph knowledge is quarantined in `Scene.svelte`, whi
 ## Related
 
 - [`orientation.md`](./orientation.md) — snapping's ground plane comes from `GROUND_NORMAL`
+- [`ui-controls.md`](./ui-controls.md) — the gizmo and inspector that sit on top of this pipeline
 - [`../roadmap/phase-4-cad-depth.md`](../roadmap/phase-4-cad-depth.md) — radial menus, widget-less transforms, constraint inference
 - [`invariants.md`](./invariants.md) — 8 and 9

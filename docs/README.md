@@ -14,6 +14,8 @@ Then, depending on what you are doing:
 | Touching geometry or the worker          | [kernel](./architecture/kernel.md)                                                                                                 |
 | Touching the viewport or anything visual | [rendering](./architecture/rendering.md) + [orientation](./architecture/orientation.md)                                            |
 | Touching pointer, gesture, or snapping   | [input](./architecture/input.md)                                                                                                   |
+| Building object manipulation or controls | [ui-controls](./architecture/ui-controls.md) + [document-model](./architecture/document-model.md)                                  |
+| Connecting an agent to the kernel        | [agent-api](./architecture/agent-api.md)                                                                                           |
 | Adding UI or a store                     | [state and errors](./architecture/state-and-errors.md)                                                                             |
 | Writing tests                            | [testing](./guides/testing.md)                                                                                                     |
 | About to open a PR                       | [conventions](./guides/conventions.md)                                                                                             |
@@ -30,6 +32,9 @@ Then, depending on what you are doing:
 - **[orientation.md](./architecture/orientation.md)** — right-handed Z-up. World space _is_ kernel space.
 - **[input.md](./architecture/input.md)** — router → arbiter → picking → snapping, and the precision model behind it.
 - **[state-and-errors.md](./architecture/state-and-errors.md)** — document model / GPU / view models, and how kernel failures surface.
+- **[document-model.md](./architecture/document-model.md)** — the N-object model with a command-shaped mutation API. _Designed, not built_ — the keystone for manipulation and agent work.
+- **[ui-controls.md](./architecture/ui-controls.md)** — the inspector and the gizmo made real; the two-physics rule for move/rotate vs resize; the component strategy. _Designed, not built._
+- **[agent-api.md](./architecture/agent-api.md)** — connecting an agent out-of-band via brepjs's Node tooling; STEP import as the bridge. _Designed, not built._
 
 ### Roadmap — what is built and what is next
 

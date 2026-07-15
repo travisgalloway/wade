@@ -24,6 +24,8 @@ Three request kinds, discriminated on `type`, all carrying a `jobId` and a `soli
 export type KernelRequest = MakeBoxRequest | MakeCylinderRequest | TessellateRequest;
 ```
 
+STEP import (Phase 4) adds a fourth, `ImportStepRequest`, carrying the STEP bytes as an `ArrayBuffer`; the worker calls brepjs `importSTEP` and stores the result in the same `Map<SolidId, ValidSolid>` so it re-meshes like any other solid. Because the union is closed, adding the member forces every `switch` to be reconsidered — by design. See [`agent-api.md`](./agent-api.md#the-wade-side-step-import-path).
+
 ### Never throw across the boundary
 
 Comlink structured-clones a thrown `Error` and loses its type — a recoverable UI condition becomes an unhandled rejection. So every fallible method returns a result union:
