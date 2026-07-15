@@ -10,6 +10,3 @@ bun.lockb
 
 # Local agent config, git-ignored and never committed
 .claude/settings.local.json
-
-# Committed verbatim from planning docs, not reformatted
-/docs/
