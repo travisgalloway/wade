@@ -8,7 +8,7 @@
 
 ## Dependencies
 
-- **pnpm only** (`pnpm@10.14.0`). Never npm or yarn for installs.
+- **pnpm for installs** (`pnpm@10.14.0`). Never npm or yarn to install dependencies. (The one exception is `playwright.config.ts`'s `webServer`, which shells out to `npm run build && npm run preview` — a self-contained test harness detail, not a project install path.)
 - **Node >= 24 is a hard requirement.** `brepjs@18` declares it and `.npmrc` sets `engine-strict=true`, so the wrong Node version fails `pnpm install` outright. `.nvmrc` pins it.
 - **Before installing any dependency, check its current version and API** rather than trusting a version pinned in these docs. Versions here are guidance, not gospel.
 

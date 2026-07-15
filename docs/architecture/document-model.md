@@ -12,7 +12,7 @@ Both new workstreams — direct manipulation and agent integration — need to r
 
 ## Shape
 
-Everything here is **plain and structured-clone-safe** — no `three` types, no kernel import (invariants 3, 4):
+Everything here is **plain and structured-clone-safe** — no `three` types, and no _runtime_ kernel dependency (no `KernelClient`, comlink, or brepjs import). Type-only imports of the wire-contract types from the zero-import `$lib/kernel/types` — `SolidId`, `BoxParams`, `CylinderParams` — are fine and expected; that module exists precisely to be shared this way (invariants 3, 4):
 
 ```ts
 type ObjectId = SolidId; // generalize the existing alias; still a string
